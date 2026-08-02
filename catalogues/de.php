@@ -5,7 +5,7 @@
  * Keys are the English source strings. A plural entry is keyed by CLDR
  * category — German uses `one` and `other`.
  *
- * @package SugarMill\I18n
+ * @package Sugar\I18n
  */
 
 return array(

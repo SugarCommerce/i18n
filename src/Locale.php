@@ -2,7 +2,7 @@
 /**
  * Locale negotiation.
  *
- * @package   SugarMill\I18n
+ * @package   Sugar\I18n
  * @copyright Copyright (c) 2026, ArrayPress Limited
  * @license   GPL-2.0-or-later
  * @since     1.0.0
@@ -10,7 +10,7 @@
 
 declare( strict_types=1 );
 
-namespace SugarMill\I18n;
+namespace Sugar\I18n;
 
 /**
  * Class Locale

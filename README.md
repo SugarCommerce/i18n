@@ -28,13 +28,13 @@ PHP 8.5+
 ## Installation
 
 ```bash
-composer require sugarmill/i18n
+composer require sugarcommerce/i18n
 ```
 
 ## Usage
 
 ```php
-use SugarMill\I18n\Translations;
+use Sugar\I18n\Translations;
 
 $t = Translations::for( __DIR__ . '/languages', 'de' );
 
@@ -73,7 +73,7 @@ Better still, assert it in a test: collect the source strings your code passes a
 ## Plurals
 
 ```php
-use SugarMill\I18n\Plural;
+use Sugar\I18n\Plural;
 
 Plural::category( 1, 'en' );     // 'one'
 Plural::category( 0, 'fr' );     // 'one'  — French puts zero in the singular
@@ -90,7 +90,7 @@ Plural::categories( 'ar' );      // the six an Arabic translator must fill
 ## Locale negotiation
 
 ```php
-use SugarMill\I18n\Locale;
+use Sugar\I18n\Locale;
 
 Locale::negotiate( $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '', [ 'en', 'de', 'pt-BR' ] );
 
