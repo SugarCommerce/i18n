@@ -2,7 +2,7 @@
 /**
  * Translation, plurals and locale negotiation.
  *
- * @package   Sugar\I18n
+ * @package   SugarCommerce\I18n
  * @copyright Copyright (c) 2026, ArrayPress Limited
  * @license   GPL-2.0-or-later
  * @since     1.0.0
@@ -10,15 +10,15 @@
 
 declare( strict_types=1 );
 
-namespace Sugar\I18n\Tests;
+namespace SugarCommerce\I18n\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Sugar\I18n\Catalogue;
-use Sugar\I18n\Locale;
-use Sugar\I18n\Plural;
-use Sugar\I18n\Translations;
+use SugarCommerce\I18n\Catalogue;
+use SugarCommerce\I18n\Locale;
+use SugarCommerce\I18n\Plural;
+use SugarCommerce\I18n\Translations;
 
 #[CoversClass( Translations::class )]
 #[CoversClass( Catalogue::class )]
