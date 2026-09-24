@@ -54,6 +54,7 @@ final readonly class Translations implements Translator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function get( string $text, array $replacements = array() ): string {
 		$found = $this->catalogue->lookup( $text );
 
@@ -75,6 +76,7 @@ final readonly class Translations implements Translator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function plural( string $singular, string $plural, int $count, array $replacements = array() ): string {
 		$replacements = array_merge( array( 'count' => (string) $count ), $replacements );
 		$found        = $this->catalogue->lookup( $singular );
@@ -100,6 +102,7 @@ final readonly class Translations implements Translator {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function locale(): string {
 		return $this->catalogue->locale;
 	}
