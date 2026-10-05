@@ -129,7 +129,7 @@ final readonly class Cli {
 	 */
 	public static function add( string $file, array $keys, array $code ): bool {
 		$quote = static fn ( string $text ): string => "'" . strtr( $text, array( '\\' => '\\\\', "'" => "\\'" ) ) . "'";
-		$lines = "\n\t// ── New: added by bin/strings.php, not yet translated ─────────────────\n\n";
+		$lines = "\n\t// ── New: found in the code, not yet translated ─────────────────────\n\n";
 
 		foreach ( $keys as $key ) {
 			$plural = $code[ $key ]['plural'] ?? null;
