@@ -266,4 +266,126 @@ final class I18nTest extends TestCase {
 	public function test_negotiation_with_nothing_available_returns_the_fallback(): void {
 		$this->assertSame( 'en', Locale::negotiate( 'de', array() ) );
 	}
+
+	/* ─── One tag ───────────────────────────────────────────────────── */
+
+	/**
+	 * @return array<string, array{0: string|null, 1: string}>
+	 */
+	public static function single_tags(): array {
+		return array(
+			'regional to base'     => array( 'de-AT', 'de' ),
+			'base to the regional' => array( 'pt', 'pt-BR' ),
+			'underscore and case'  => array( 'pt_br', 'pt-BR' ),
+			'source language'      => array( 'en-GB', 'en' ),
+			'auto'                 => array( 'auto', '' ),
+			'unknown'              => array( 'xx', '' ),
+			'garbage'              => array( '../../etc', '' ),
+			'empty'                => array( '', '' ),
+			'null'                 => array( null, '' ),
+		);
+	}
+
+	/**
+	 * "No preference" is a different answer from "the source language",
+	 * and only the caller knows what to fall back to.
+	 */
+	#[DataProvider( 'single_tags' )]
+	public function test_one_tag_is_matched_to_what_we_have_or_to_nothing( ?string $tag, string $expected ): void {
+		$this->assertSame( $expected, Locale::match( $tag, array( 'en', 'de', 'pt-BR' ) ) );
+	}
+
+	public function test_icu_spells_a_tag_with_an_underscore(): void {
+		$this->assertSame( 'pt_BR', Locale::icu( 'pt-BR' ) );
+		$this->assertSame( 'de', Locale::icu( 'de' ) );
+	}
+
+	/* ─── Names ─────────────────────────────────────────────────────── */
+
+	/**
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public static function endonyms(): array {
+		return array(
+			'German'               => array( 'de', 'Deutsch' ),
+			'Japanese'             => array( 'ja', '日本語' ),
+			'Polish'               => array( 'pl', 'Polski' ),
+			'Brazilian Portuguese' => array( 'pt-BR', 'Português (Brasil)' ),
+			'lower-case region'    => array( 'pt_br', 'Português (Brasil)' ),
+			'script subtag'        => array( 'zh-hant', '中文（繁體）' ),
+		);
+	}
+
+	/**
+	 * In itself, because the person looking for German cannot read the
+	 * English word for it.
+	 */
+	#[DataProvider( 'endonyms' )]
+	public function test_a_language_is_named_in_itself( string $locale, string $expected ): void {
+		$this->assertSame( $expected, Locale::endonym( $locale ) );
+	}
+
+	/**
+	 * A region with no entry of its own: ext-intl's name where it is
+	 * loaded, the language's without it — German either way.
+	 */
+	public function test_a_region_without_an_entry_is_still_named_in_its_language(): void {
+		$this->assertStringStartsWith( 'Deutsch', Locale::endonym( 'de-AT' ) );
+	}
+
+	public function test_an_unknown_language_is_named_by_its_tag_rather_than_nothing(): void {
+		$this->assertSame( 'xx', Locale::endonym( 'xx' ) );
+	}
+
+	/* ─── Catalogue files ───────────────────────────────────────────── */
+
+	public function test_the_locales_are_read_from_the_directory_with_the_source_first(): void {
+		$this->assertSame(
+			array( 'en', 'de', 'pl', 'pt-BR' ),
+			Catalogue::locales( __DIR__ . '/fixtures/lang' )
+		);
+	}
+
+	public function test_the_source_is_available_even_without_a_file(): void {
+		$this->assertSame( array( 'en', 'de' ), Catalogue::locales( $this->catalogues() ) );
+		$this->assertSame( array( 'en' ), Catalogue::locales( __DIR__ . '/nowhere' ) );
+	}
+
+	/**
+	 * What one file has, not what loading a locale would give: a gap
+	 * check that saw inherited entries would miss the gaps.
+	 */
+	public function test_a_file_is_read_as_written(): void {
+		$german = Catalogue::file( __DIR__ . '/fixtures/lang', 'de' );
+
+		$this->assertSame( 'Bestellung {reference}', $german['Order {reference}'] );
+		$this->assertSame( array(), Catalogue::file( __DIR__ . '/fixtures/lang', 'fr' ) );
+		$this->assertSame( array(), Catalogue::file( __DIR__ . '/fixtures', 'lang/de' ) );
+	}
+
+	/* ─── Plural examples ───────────────────────────────────────────── */
+
+	public function test_each_category_has_a_smallest_example(): void {
+		$this->assertSame( 1, Plural::example( 'one', 'en' ) );
+		$this->assertSame( 0, Plural::example( 'other', 'en' ) );
+		$this->assertSame( 2, Plural::example( 'few', 'pl' ) );
+		$this->assertSame( 0, Plural::example( 'many', 'pl' ) );
+		$this->assertSame( 3, Plural::example( 'few', 'ar' ) );
+		$this->assertSame( 100, Plural::example( 'other', 'ar' ) );
+		$this->assertSame( -1, Plural::example( 'few', 'en' ) );
+	}
+
+	public function test_every_form_of_a_sentence_is_given_for_a_script(): void {
+		$polish = new Translations( Catalogue::load( __DIR__ . '/fixtures/lang', 'pl' ) );
+
+		$forms = Plural::forms(
+			'pl',
+			static fn ( int $n ): string => $polish->plural( '{count} file', '{count} files', $n, array( 'count' => '{count}' ) )
+		);
+
+		$this->assertSame(
+			array( 'one' => '{count} plik', 'few' => '{count} pliki', 'many' => '{count} plików' ),
+			$forms
+		);
+	}
 }

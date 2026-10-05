@@ -149,4 +149,63 @@ final readonly class Plural {
 			default                                  => array( 'one', 'other' ),
 		};
 	}
+
+	/**
+	 * The smallest count, zero or more, that falls in a category.
+	 *
+	 * For showing a translator — or a script — a real number in each form
+	 * rather than the category's name, which means nothing to most people:
+	 * "few" is 2 in Polish and 3 in Arabic.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string $category A CLDR category.
+	 * @param string $locale   Language code.
+	 *
+	 * @return int The example, or -1 when the language has no such
+	 *             category.
+	 */
+	public static function example( string $category, string $locale ): int {
+		if ( ! in_array( $category, self::categories( $locale ), true ) ) {
+			return -1;
+		}
+
+		// Every category of every language above is reached by 100; the
+		// bound only guards against a rule added later that never is.
+		for ( $n = 0; $n < 1000; $n++ ) {
+			if ( self::category( $n, $locale ) === $category ) {
+				return $n;
+			}
+		}
+
+		return -1;
+	}
+
+	/**
+	 * Every plural form of a sentence, keyed by category.
+	 *
+	 * For a page whose script counts in the browser and so cannot call the
+	 * translator itself: the page hands over each form the language has,
+	 * and the script picks with `Intl.PluralRules`. Each form is made by
+	 * asking `$form` for an example count in that category, so a catalogue
+	 * entry is read exactly the way the server reads it.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string                $locale Language code.
+	 * @param \Closure(int): string $form   The sentence for a count —
+	 *                                      typically a plural() call with
+	 *                                      `{count}` left in for the script.
+	 *
+	 * @return array<string, string> Category => form.
+	 */
+	public static function forms( string $locale, \Closure $form ): array {
+		$forms = array();
+
+		foreach ( self::categories( $locale ) as $category ) {
+			$forms[ $category ] = $form( self::example( $category, $locale ) );
+		}
+
+		return $forms;
+	}
 }
