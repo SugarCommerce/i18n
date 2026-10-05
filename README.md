@@ -20,6 +20,9 @@ Three things go wrong when an application is translated after the fact.
 - 🌐 **`Accept-Language` negotiation** with quality weights and regional fallback.
 - 📦 **Catalogues are PHP arrays** — opcached, no parser, no build step.
 - ↔️ **RTL detection**, because a translated Arabic page still reads as broken without `dir="rtl"`.
+- 🗣️ **Languages named in themselves** for a picker — "Deutsch", not "German".
+- 🎯 **A scoped request language** with opt-in `__()`, `_n()` and `__html()` helpers that never clash with WordPress's.
+- 🔍 **String extraction and a catalogue report** — `vendor/bin/i18n-strings` finds what each catalogue is missing and fails the build on it.
 
 ## Requirements
 
@@ -70,6 +73,64 @@ new Translations(
 
 Better still, assert it in a test: collect the source strings your code passes and check each one exists in the catalogue. A missing translation is silent by design — it has to be, or one gap takes the page down — so something has to look.
 
+`Extractor` collects them. It reads `__( '…' )`, `__html( '…' )` and `_n( '…', '…', … )` — literal strings only, comments and Blade `{{-- --}}` removed first — from PHP and template files:
+
+```php
+use SugarCommerce\I18n\{Catalogue, Diff, Extractor, Placeholders};
+
+$code   = ( new Extractor() )->scan( [ __DIR__ . '/src', __DIR__ . '/templates' ] );
+$report = Diff::report( $code, __DIR__ . '/lang', 'en' );
+// [ 'en' => [ 'missing' => [...new in the code], 'unused' => [...] ],
+//   'de' => [ 'missing' => [...to translate],    'unused' => [...] ], … ]
+
+Placeholders::match( 'Order {reference}', 'Bestellung {referenz}' );   // false
+```
+
+Two steps, in the order a string travels: the code against the source catalogue (a string wrapped in the code and not listed there is new), then the source catalogue against each translation. `new Extractor( [ 't' ], [ 'tn' ] )` reads helpers with other names.
+
+The same report from a terminal, exiting 1 when anything is missing so it can gate a build:
+
+```bash
+vendor/bin/i18n-strings --dir=lang --scan=src --scan=templates          # every catalogue
+vendor/bin/i18n-strings --dir=lang --scan=src de fr                     # only these
+vendor/bin/i18n-strings --dir=lang --scan=src --add                     # append new strings to en.php
+vendor/bin/i18n-strings --dir=lang --scan=src --json
+```
+
+An application with its directories fixed can call `Cli::run( $argv, $lang_dir, $roots )` from a script of its own.
+
+## The language of this request
+
+```php
+use SugarCommerce\I18n\Current;
+
+Current::configure( __DIR__ . '/lang' );   // once, at boot
+Current::helpers();                        // opt in to __(), _n(), __html()
+
+Current::available();                      // [ 'en', 'de', 'pt-BR' ] — read from the directory
+Current::supported( 'pt' );                // 'pt-BR'; '' for 'auto', 'xx' or garbage
+
+Current::within( 'de', fn() => $mailer->send( $order ) );   // German, then back
+echo __( 'Order {reference}', [ 'reference' => 'SC-7K2Q9X' ] );
+echo _n( '{count} file', '{count} files', 3 );
+echo __html( 'Read the {link}terms{/link}.', [ 'link' => '<a href="/terms">', '/link' => '</a>' ] );
+```
+
+`Current` is the one mutable, static class in the package, on purpose. A helper that had to be handed a translator would have to be handed one by every template, partial and email that prints a sentence, and the first one that forgot would print English in the middle of a German page. PHP serves one request per process, so the request's language is a fact about the process. The risk with process state is leaking it — a queue run that sends a German email leaving the next one in German — which is what `within()` is for: it scopes a language to a piece of work and restores the previous one in a `finally`.
+
+The helpers are opt-in rather than autoloaded, and each is defined only if the name is free: WordPress already has a `__()`.
+
+## Language names
+
+```php
+Locale::endonym( 'de' );      // 'Deutsch'
+Locale::endonym( 'pt-BR' );   // 'Português (Brasil)'
+Locale::match( 'de-AT', [ 'en', 'de' ] );   // 'de' — one tag, '' when nothing serves it
+Locale::icu( 'pt-BR' );       // 'pt_BR', for IntlDateFormatter and NumberFormatter
+```
+
+A language picker names each language in itself, because the person looking for German is the one who cannot read the English word for it. A built-in table covers the common languages and the regional variants whose names differ; anything else is asked of ext-intl when it is loaded, and failing that the tag is returned.
+
 ## Plurals
 
 ```php
@@ -86,6 +147,15 @@ Plural::categories( 'ar' );      // the six an Arabic translator must fill
 ```
 
 `categories()` is what a translation UI should ask for. Showing a Japanese translator two boxes, or a Russian one two boxes, is how the wrong form ends up shipped.
+
+For a script that counts in the browser and so cannot ask the server, hand it every form and let it pick with `Intl.PluralRules`:
+
+```php
+Plural::example( 'few', 'pl' );   // 2 — the smallest count in that category
+
+Plural::forms( 'pl', fn( int $n ) => $t->plural( '{count} file', '{count} files', $n, [ 'count' => '{count}' ] ) );
+// [ 'one' => '{count} plik', 'few' => '{count} pliki', 'many' => '{count} plików' ]
+```
 
 ## Locale negotiation
 
@@ -112,7 +182,7 @@ composer install
 composer test
 ```
 
-47 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, negotiation with quality weights and regional fallback, placeholder reordering, regional catalogue inheritance, and the fallback-to-source guarantee.
+101 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, and the report's text, JSON and `--add` output.
 
 ## License
 

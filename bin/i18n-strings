@@ -1,0 +1,52 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Which translatable strings each catalogue is missing, and which it no
+ * longer needs.
+ *
+ * Usage:
+ *   vendor/bin/i18n-strings --dir=lang --scan=src --scan=templates
+ *   vendor/bin/i18n-strings --dir=lang --scan=src de fr     only these
+ *   vendor/bin/i18n-strings ... --add                       also append new strings to the source
+ *   vendor/bin/i18n-strings ... --json                      machine-readable
+ *
+ *   --dir=…     the catalogue directory (default: lang)
+ *   --source=…  the source locale (default: en)
+ *   --scan=…    a directory to read, repeatable (default: src)
+ *
+ * Exits 1 when anything is missing, so it can gate a build.
+ *
+ * @package   SugarCommerce\I18n
+ * @copyright Copyright (c) 2026, ArrayPress Limited
+ * @license   GPL-2.0-or-later
+ * @since     1.1.0
+ */
+
+declare( strict_types=1 );
+
+// Composer's proxy says where the autoloader is; failing that, this package
+// is either the project itself or installed under vendor/.
+$autoload = $GLOBALS['_composer_autoload_path'] ?? null;
+
+foreach ( array( $autoload, __DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php' ) as $candidate ) {
+	if ( null !== $candidate && is_file( $candidate ) ) {
+		require $candidate;
+		break;
+	}
+}
+
+$directory = 'lang';
+$source    = 'en';
+$roots     = array();
+$rest      = array( $argv[0] ?? 'i18n-strings' );
+
+foreach ( array_slice( $argv, 1 ) as $argument ) {
+	match ( true ) {
+		str_starts_with( $argument, '--dir=' )    => $directory = substr( $argument, 6 ),
+		str_starts_with( $argument, '--source=' ) => $source = substr( $argument, 9 ),
+		str_starts_with( $argument, '--scan=' )   => $roots[] = substr( $argument, 7 ),
+		default                                   => $rest[] = $argument,
+	};
+}
+
+exit( \SugarCommerce\I18n\Cli::run( $rest, $directory, $roots ?: array( 'src' ), $source ) );
