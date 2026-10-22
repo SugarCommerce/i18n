@@ -66,7 +66,8 @@ if ( ! function_exists( '__html' ) ) {
 	/**
 	 * Translate a sentence that has markup inside it, such as a link.
 	 *
-	 * The translated text is escaped first and the replacements go in
+	 * The translated text is escaped first — a malformed byte in it becomes
+	 * U+FFFD rather than emptying the sentence — and the replacements go in
 	 * after, as given — so a sentence can carry `{link}…{/link}` round the
 	 * words a translator chooses to link, without being cut in two around
 	 * them. Every replacement is HTML: escape any value of your own before
@@ -81,7 +82,7 @@ if ( ! function_exists( '__html' ) ) {
 	 */
 	function __html( string $text, array $html = array() ): string {
 		return Translations::interpolate(
-			htmlspecialchars( Current::translator()->get( $text ), ENT_QUOTES, 'UTF-8' ),
+			htmlspecialchars( Current::translator()->get( $text ), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' ),
 			$html
 		);
 	}

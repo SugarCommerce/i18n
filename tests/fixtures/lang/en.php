@@ -4,6 +4,8 @@
  * one, and one it no longer does.
  */
 
+declare( strict_types=1 );
+
 return array(
 	'Order {reference}' => 'Order {reference}',
 	'{count} file'      => array(

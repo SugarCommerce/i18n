@@ -60,6 +60,8 @@ return [
 ];
 ```
 
+A catalogue is PHP, so loading one runs it: keep the directory out of reach of uploads and anything else a visitor or a translation service can write to. The file name is only ever built from a checked locale tag, never a path, and an entry that is not a string or an array of category => string is dropped as the file loads.
+
 `de-AT` inherits everything from `de`, so a regional catalogue only lists what actually differs.
 
 ## Finding untranslated strings
@@ -129,7 +131,7 @@ Locale::match( 'de-AT', [ 'en', 'de' ] );   // 'de' — one tag, '' when nothing
 Locale::icu( 'pt-BR' );       // 'pt_BR', for IntlDateFormatter and NumberFormatter
 ```
 
-A language picker names each language in itself, because the person looking for German is the one who cannot read the English word for it. A built-in table covers the common languages and the regional variants whose names differ; anything else is asked of ext-intl when it is loaded, and failing that the tag is returned.
+A language picker names each language in itself, because the person looking for German is the one who cannot read the English word for it. A built-in table covers the common languages and the regional variants whose names differ; anything else is asked of ext-intl when it is loaded, and failing that the tag is returned. Something that is not a well-formed tag — markup, a path — gets `''`, so a tag from a query string cannot come back as a language's "name".
 
 ## Plurals
 
@@ -169,7 +171,7 @@ Locale::language( 'pt-BR' );    // 'pt'
 Locale::is_rtl( 'ar' );         // true
 ```
 
-Quality weights are honoured and beat header order, so `en;q=0.4,de;q=0.9` picks German. A request for `de-AT` falls back to `de` before moving down the list, and a request for `pt` is satisfied by `pt-BR` when that is all there is.
+Quality weights are honoured and beat header order, so `en;q=0.4,de;q=0.9` picks German. A request for `de-AT` falls back to `de` before moving down the list, and a request for `pt` is satisfied by `pt-BR` when that is all there is. A range weighted `q=0` is never chosen, and only the first 32 ranges of a header are read.
 
 ## Using your framework's translator instead
 
@@ -182,7 +184,7 @@ composer install
 composer test
 ```
 
-101 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, and the report's text, JSON and `--add` output.
+112 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, the report's text, JSON and `--add` output, and the hardening: tags that try to name a path, malformed catalogue entries, `q=0` and oversized headers, non-tags given no name, `PHP_INT_MIN` counts, and control characters kept off the terminal.
 
 ## License
 

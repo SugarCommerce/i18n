@@ -29,7 +29,7 @@ declare( strict_types=1 );
 $autoload = $GLOBALS['_composer_autoload_path'] ?? null;
 
 foreach ( array( $autoload, __DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php' ) as $candidate ) {
-	if ( null !== $candidate && is_file( $candidate ) ) {
+	if ( is_string( $candidate ) && is_file( $candidate ) ) {
 		require $candidate;
 		break;
 	}
@@ -38,9 +38,10 @@ foreach ( array( $autoload, __DIR__ . '/../vendor/autoload.php', __DIR__ . '/../
 $directory = 'lang';
 $source    = 'en';
 $roots     = array();
-$rest      = array( $argv[0] ?? 'i18n-strings' );
+$given     = $argv ?? array();
+$rest      = array( $given[0] ?? 'i18n-strings' );
 
-foreach ( array_slice( $argv, 1 ) as $argument ) {
+foreach ( array_slice( $given, 1 ) as $argument ) {
 	match ( true ) {
 		str_starts_with( $argument, '--dir=' )    => $directory = substr( $argument, 6 ),
 		str_starts_with( $argument, '--source=' ) => $source = substr( $argument, 9 ),

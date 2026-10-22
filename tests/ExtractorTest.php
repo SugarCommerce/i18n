@@ -198,6 +198,43 @@ final class ExtractorTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Strings come out of code that may be a stranger's pull request: an
+	 * escape sequence in one must not reach the terminal and rewrite the
+	 * report.
+	 */
+	public function test_control_characters_in_a_string_are_shown_not_sent_to_the_terminal(): void {
+		$text = Cli::render(
+			1,
+			array( 'en' => array( 'missing' => array( "Pay\e[2J\e]0;owned\x07 now\u{009B}" ), 'unused' => array() ) ),
+			'en',
+			array( 'src' )
+		);
+
+		$this->assertStringNotContainsString( "\e", $text );
+		$this->assertStringNotContainsString( "\x07", $text );
+		$this->assertStringContainsString( '  + Pay\x1B[2J\x1B]0;owned\x07 now\xC2\x9B', $text );
+	}
+
+	/**
+	 * Whatever a scanned string holds, --add writes it as a string: the
+	 * catalogue is required as code, so a quote must not end the literal.
+	 */
+	public function test_an_added_string_cannot_become_code_in_the_catalogue(): void {
+		$file = tempnam( sys_get_temp_dir(), 'i18n' );
+		file_put_contents( $file, "<?php\nreturn array(\n);\n" );
+
+		$evil = "x' => 'y', (function () { throw new \\Exception( 'ran' ); })(), '\\";
+
+		try {
+			Cli::add( $file, array( $evil ), array( $evil => array( 'plural' => null, 'files' => array() ) ) );
+
+			$this->assertSame( array( $evil => $evil ), require $file );
+		} finally {
+			unlink( $file );
+		}
+	}
+
 	public function test_several_scanned_directories_are_named_as_a_sentence(): void {
 		$this->assertStringStartsWith(
 			'0 translatable strings in src/, lib/ and templates/.',

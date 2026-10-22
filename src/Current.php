@@ -166,6 +166,10 @@ final class Current {
 	/**
 	 * The translator for a locale, loaded once per process.
 	 *
+	 * Kept by normalised tag, so `de_DE`, `de-de` and `DE-DE` share one
+	 * translator, and a long-running worker handed tags from outside
+	 * keeps at most one per real locale rather than one per spelling.
+	 *
 	 * @since 1.1.0
 	 *
 	 * @param string $locale A supported locale.
@@ -173,8 +177,10 @@ final class Current {
 	 * @return Translator
 	 */
 	public static function translator_for( string $locale ): Translator {
+		$locale = Locale::normalise( $locale );
+
 		return self::$loaded[ $locale ] ??= '' === self::$directory
-			? new Translations( new Catalogue( Locale::normalise( $locale ) ) )
+			? new Translations( new Catalogue( $locale ) )
 			: Translations::for( self::$directory, $locale );
 	}
 

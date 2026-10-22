@@ -4,6 +4,8 @@
  * normalised.
  */
 
+declare( strict_types=1 );
+
 return array(
 	'Order {reference}' => 'Pedido {reference}',
 );

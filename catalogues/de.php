@@ -8,6 +8,8 @@
  * @package SugarCommerce\I18n
  */
 
+declare( strict_types=1 );
+
 return array(
 
 	'You already own {items}.' => 'Sie besitzen {items} bereits.',

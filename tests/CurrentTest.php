@@ -88,6 +88,16 @@ final class CurrentTest extends TestCase {
 	}
 
 	/**
+	 * One translator per locale however it is spelt, so a worker handed
+	 * tags from outside cannot fill memory with spellings of German.
+	 */
+	public function test_a_translator_is_kept_by_its_normalised_tag(): void {
+		$this->assertSame( Current::translator_for( 'de' ), Current::translator_for( 'DE' ) );
+		$this->assertSame( Current::translator_for( 'pt-BR' ), Current::translator_for( 'pt_br' ) );
+		$this->assertSame( 'pt-BR', Current::translator_for( 'pt_br' )->locale() );
+	}
+
+	/**
 	 * Before configure() there are no catalogues, and every sentence
 	 * prints as written rather than failing.
 	 */
@@ -125,6 +135,14 @@ final class CurrentTest extends TestCase {
 			'Fish &amp; chips: <b>yes</b>',
 			__html( 'Fish & chips: {answer}', array( 'answer' => '<b>yes</b>' ) )
 		);
+	}
+
+	/**
+	 * A malformed byte would make htmlspecialchars() return '' and blank
+	 * the whole sentence.
+	 */
+	public function test_a_malformed_byte_does_not_empty_the_sentence(): void {
+		$this->assertSame( "Caf\u{FFFD} &amp; {x}", __html( "Caf\xE9 & {x}" ) );
 	}
 
 	/**

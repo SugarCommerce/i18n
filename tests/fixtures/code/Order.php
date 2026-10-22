@@ -5,6 +5,8 @@
  * A docblock showing __( 'Not a real string' ) is not a string to translate.
  */
 
+declare( strict_types=1 );
+
 // Nor is a comment: __( 'Commented out' ).
 
 $heading = __( 'Order {reference}', array( 'reference' => $reference ) );

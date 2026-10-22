@@ -23,6 +23,8 @@ namespace SugarCommerce\I18n;
 final readonly class Translations implements Translator {
 
 	/**
+	 * A translator over one catalogue.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param Catalogue     $catalogue Translations for the active locale.
@@ -96,7 +98,7 @@ final readonly class Translations implements Translator {
 		$this->report( $singular );
 
 		// English source: two forms, and everything but exactly one is plural.
-		return self::interpolate( 1 === abs( $count ) ? $singular : $plural, $replacements );
+		return self::interpolate( 1 === $count || -1 === $count ? $singular : $plural, $replacements );
 	}
 
 	/**

@@ -33,13 +33,15 @@ final readonly class Diff {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param array $wanted What should be there, keyed by string.
-	 * @param array $have   What is there, keyed by string.
+	 * @param array<array-key, mixed> $wanted What should be there, keyed by
+	 *                                        string.
+	 * @param array<array-key, mixed> $have   What is there, keyed by string.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	public static function missing( array $wanted, array $have ): array {
-		return array_values( array_map( 'strval', array_keys( array_diff_key( $wanted, $have ) ) ) );
+		// strval: PHP keys `'404'` as the integer 404.
+		return array_map( 'strval', array_keys( array_diff_key( $wanted, $have ) ) );
 	}
 
 	/**
@@ -48,13 +50,14 @@ final readonly class Diff {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param array    $code      What Extractor::scan() found.
-	 * @param string   $directory Catalogue directory.
-	 * @param string   $source    The source locale.
-	 * @param string[] $locales   Translations to check. Empty for every
-	 *                            catalogue in the directory.
+	 * @param array<string, array{plural: string|null, files: list<string>}> $code      What Extractor::scan() found.
+	 * @param string                                                         $directory Catalogue directory.
+	 * @param string                                                         $source    The source locale.
+	 * @param array<string>                                                  $locales   Translations to check. Empty
+	 *                                                                                  for every catalogue in the
+	 *                                                                                  directory.
 	 *
-	 * @return array<string, array{missing: string[], unused: string[]}>
+	 * @return array<string, array{missing: list<string>, unused: list<string>}>
 	 *         Keyed by locale, the source first.
 	 */
 	public static function report( array $code, string $directory, string $source, array $locales = array() ): array {
@@ -86,7 +89,7 @@ final readonly class Diff {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param array<string, array{missing: string[], unused: string[]}> $report From report().
+	 * @param array<string, array{missing: list<string>, unused: list<string>}> $report From report().
 	 *
 	 * @return bool
 	 */

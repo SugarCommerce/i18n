@@ -1,7 +1,7 @@
 {
   "name": "sugarcommerce/i18n",
   "description": "Translation for plain PHP: English source strings as keys, CLDR plural categories, named placeholders, and Accept-Language negotiation. Catalogues are PHP arrays, so they are opcached and need no parser. Zero dependencies.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "library",
   "license": "GPL-2.0-or-later",
   "homepage": "https://github.com/sugarcommerce/i18n",

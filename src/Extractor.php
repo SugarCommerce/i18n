@@ -35,17 +35,27 @@ final readonly class Extractor {
 
 	/**
 	 * A quoted PHP string literal, single or double.
+	 *
+	 * Each alternative consumes a different first character, so the
+	 * pattern cannot backtrack catastrophically on an unclosed quote.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @var string
 	 */
 	private const string LITERAL = '(\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*")';
 
 	/**
+	 * An extractor for some helper names and file extensions.
+	 *
 	 * @since 1.1.0
 	 *
-	 * @param string[] $singular Helpers whose first argument is a sentence.
-	 * @param string[] $plural   Helpers whose first two arguments are a
-	 *                           singular and its plural.
-	 * @param string[] $extensions File extensions to read. `blade.php`
-	 *                             files are matched by `php`.
+	 * @param array<string> $singular   Helpers whose first argument is a
+	 *                                  sentence.
+	 * @param array<string> $plural     Helpers whose first two arguments
+	 *                                  are a singular and its plural.
+	 * @param array<string> $extensions File extensions to read. `blade.php`
+	 *                                  files are matched by `php`.
 	 */
 	public function __construct(
 		private array $singular = array( '__', '__html' ),
@@ -58,10 +68,10 @@ final readonly class Extractor {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param string[] $roots Directories to read, recursively. One that
-	 *                        does not exist is skipped.
+	 * @param array<string> $roots Directories to read, recursively. One
+	 *                             that does not exist is skipped.
 	 *
-	 * @return array<string, array{plural: string|null, files: string[]}>
+	 * @return array<string, array{plural: string|null, files: list<string>}>
 	 *         Keyed by the source string, sorted.
 	 */
 	public function scan( array $roots ): array {
@@ -99,7 +109,11 @@ final readonly class Extractor {
 		$guard = '(?<![\w$>:])';
 
 		if ( array() !== $this->singular ) {
-			preg_match_all( '/' . $guard . self::names( $this->singular ) . '\(\s*' . self::LITERAL . '/', $source, $singles );
+			// A failed match (a literal past the backtrack limit) finds
+			// nothing rather than leaving $singles without its groups.
+			if ( false === preg_match_all( '/' . $guard . self::names( $this->singular ) . '\(\s*' . self::LITERAL . '/', $source, $singles ) ) {
+				$singles = array( 1 => array() );
+			}
 
 			foreach ( $singles[1] as $literal ) {
 				$found[ self::unquote( $literal ) ] ??= null;
@@ -107,7 +121,9 @@ final readonly class Extractor {
 		}
 
 		if ( array() !== $this->plural ) {
-			preg_match_all( '/' . $guard . self::names( $this->plural ) . '\(\s*' . self::LITERAL . '\s*,\s*' . self::LITERAL . '/', $source, $plurals, PREG_SET_ORDER );
+			if ( false === preg_match_all( '/' . $guard . self::names( $this->plural ) . '\(\s*' . self::LITERAL . '\s*,\s*' . self::LITERAL . '/', $source, $plurals, PREG_SET_ORDER ) ) {
+				$plurals = array();
+			}
 
 			foreach ( $plurals as $match ) {
 				$found[ self::unquote( $match[1] ) ] = self::unquote( $match[2] );
@@ -156,7 +172,7 @@ final readonly class Extractor {
 	 *
 	 * @param string $root Directory.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	private function files( string $root ): array {
 		if ( ! is_dir( $root ) ) {
@@ -165,8 +181,18 @@ final readonly class Extractor {
 
 		$files = array();
 
-		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
-			if ( in_array( $file->getExtension(), $this->extensions, true ) ) {
+		// Symlinked directories are not followed (no FOLLOW_SYMLINKS), so a
+		// link back up the tree cannot loop, and one pointing elsewhere on
+		// the machine is not read; a directory that cannot be opened is
+		// skipped rather than ending the scan.
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $root, \FilesystemIterator::SKIP_DOTS ),
+			\RecursiveIteratorIterator::LEAVES_ONLY,
+			\RecursiveIteratorIterator::CATCH_GET_CHILD
+		);
+
+		foreach ( $iterator as $file ) {
+			if ( $file instanceof \SplFileInfo && $file->isFile() && in_array( $file->getExtension(), $this->extensions, true ) ) {
 				$files[] = $file->getPathname();
 			}
 		}
@@ -183,7 +209,7 @@ final readonly class Extractor {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param string[] $names Function names.
+	 * @param array<string> $names Function names.
 	 *
 	 * @return string
 	 */

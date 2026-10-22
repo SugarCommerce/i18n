@@ -46,7 +46,7 @@ final readonly class Plural {
 	 */
 	public static function category( int $count, string $locale ): string {
 		$language = strtolower( explode( '-', str_replace( '_', '-', trim( $locale ) ) )[0] );
-		$n        = abs( $count );
+		$n        = self::magnitude( $count );
 
 		return match ( $language ) {
 			// No plural distinction whatsoever.
@@ -80,6 +80,24 @@ final readonly class Plural {
 			// Germanic and Romance.
 			default => 1 === $n ? 'one' : 'other',
 		};
+	}
+
+	/**
+	 * A count's size, without its sign.
+	 *
+	 * abs() of PHP_INT_MIN has no int to be, so PHP hands back a float —
+	 * which the rules below would refuse. The rules only look at whether
+	 * the size is 0, 1 or 2 and at its last two digits, so the largest int
+	 * ending in the same two digits (…08) stands in for it.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param int $count How many.
+	 *
+	 * @return int
+	 */
+	private static function magnitude( int $count ): int {
+		return PHP_INT_MIN === $count ? PHP_INT_MAX - 99 : abs( $count );
 	}
 
 	/**
@@ -136,7 +154,7 @@ final readonly class Plural {
 	 *
 	 * @param string $locale Language code.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	public static function categories( string $locale ): array {
 		$language = strtolower( explode( '-', str_replace( '_', '-', trim( $locale ) ) )[0] );

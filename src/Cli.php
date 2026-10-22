@@ -39,11 +39,12 @@ final readonly class Cli {
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param string[] $argv      As PHP gives it: the script name first.
-	 * @param string   $directory Catalogue directory.
-	 * @param string[] $roots     Directories whose code is scanned.
-	 * @param string   $source    The source locale.
-	 * @param resource $out       Where the report goes.
+	 * @param array<string>  $argv      As PHP gives it: the script name
+	 *                                  first.
+	 * @param string         $directory Catalogue directory.
+	 * @param array<string>  $roots     Directories whose code is scanned.
+	 * @param string         $source    The source locale.
+	 * @param resource       $out       Where the report goes.
 	 * @param Extractor|null $extractor How to find strings; the default
 	 *                                  helpers when null.
 	 *
@@ -81,13 +82,18 @@ final readonly class Cli {
 	/**
 	 * The report, for a person.
 	 *
+	 * Strings are read out of code that may not be the reader's own — a
+	 * pull request run in CI — so control characters in them are shown
+	 * as `\x1B` rather than written to the terminal, where an escape
+	 * sequence could rewrite what the report appears to say.
+	 *
 	 * @since 1.1.0
 	 *
-	 * @param int      $strings How many strings the code has.
-	 * @param array    $report  From Diff::report().
-	 * @param string   $source  The source locale.
-	 * @param string[] $roots   What was scanned.
-	 * @param bool     $added   Whether new strings were just added.
+	 * @param int                                                               $strings How many strings the code has.
+	 * @param array<string, array{missing: list<string>, unused: list<string>}> $report  From Diff::report().
+	 * @param string                                                            $source  The source locale.
+	 * @param array<string>                                                     $roots   What was scanned.
+	 * @param bool                                                              $added   Whether new strings were just added.
 	 *
 	 * @return string
 	 */
@@ -100,11 +106,11 @@ final readonly class Cli {
 				: sprintf( "\n%s: %d to translate, %d no longer used", $locale, count( $found['missing'] ), count( $found['unused'] ) ) ) . "\n";
 
 			foreach ( $found['missing'] as $key ) {
-				$text .= '  + ' . $key . "\n";
+				$text .= '  + ' . self::printable( $key ) . "\n";
 			}
 
 			foreach ( $found['unused'] as $key ) {
-				$text .= '  - ' . $key . "\n";
+				$text .= '  - ' . self::printable( $key ) . "\n";
 			}
 		}
 
@@ -119,11 +125,16 @@ final readonly class Cli {
 	 * the file's existing order and comments are left alone and the
 	 * additions are easy to find, review and move.
 	 *
+	 * Each string is written as a single-quoted literal with its `\\` and
+	 * `'` escaped, so whatever a scanned string contains it stays a string
+	 * in the catalogue and never becomes code in it.
+	 *
 	 * @since 1.1.0
 	 *
-	 * @param string   $file Path to the source catalogue.
-	 * @param string[] $keys The new strings.
-	 * @param array    $code What Extractor::scan() found, for each plural.
+	 * @param string                                                         $file Path to the source catalogue.
+	 * @param array<string>                                                  $keys The new strings.
+	 * @param array<string, array{plural: string|null, files: list<string>}> $code What Extractor::scan() found, for
+	 *                                                                             each plural.
 	 *
 	 * @return bool False when the file has no `);` to add before.
 	 */
@@ -154,11 +165,31 @@ final readonly class Cli {
 	}
 
 	/**
+	 * A string with its control characters made visible.
+	 *
+	 * C0, DEL and C1 become `\xNN`; everything else, including any
+	 * printable Unicode, is left as it is.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param string $text Text bound for a terminal.
+	 *
+	 * @return string
+	 */
+	private static function printable( string $text ): string {
+		return (string) preg_replace_callback(
+			'/[\x00-\x1F\x7F]|\xC2[\x80-\x9F]/',
+			static fn ( array $match ): string => implode( '', array_map( static fn ( string $byte ): string => sprintf( '\\x%02X', ord( $byte ) ), str_split( $match[0] ) ) ),
+			$text
+		);
+	}
+
+	/**
 	 * The scanned directories as a sentence: "src/ and templates/".
 	 *
 	 * @since 1.1.0
 	 *
-	 * @param string[] $roots Directories.
+	 * @param array<string> $roots Directories.
 	 *
 	 * @return string
 	 */

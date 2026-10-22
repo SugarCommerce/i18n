@@ -22,6 +22,30 @@ namespace SugarCommerce\I18n;
 final readonly class Locale {
 
 	/**
+	 * The most language ranges read from one `Accept-Language` header.
+	 *
+	 * Browsers send a handful. The header is the visitor's to write, so
+	 * the rest of an oversized one is ignored rather than parsed, sorted
+	 * and matched against every locale on each request.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @var int
+	 */
+	private const int MAX_RANGES = 32;
+
+	/**
+	 * A well-formed tag, loosely after BCP 47: a language, then subtags.
+	 *
+	 * Only something this shape is handed to ICU or given back as a name.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @var string
+	 */
+	private const string TAG = '/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/D';
+
+	/**
 	 * Languages' names in themselves, by tag.
 	 *
 	 * Regional entries are listed only where the name differs from the
@@ -157,16 +181,21 @@ final readonly class Locale {
 	/**
 	 * Parse an `Accept-Language` header into locales, best first.
 	 *
+	 * A range weighted `q=0` is one the reader has said they do not want,
+	 * so it is left out rather than tried last. Only the first
+	 * {@see self::MAX_RANGES} ranges are read.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param string $header Raw header value.
 	 *
-	 * @return string[]
+	 * @return list<string>
 	 */
 	public static function parse( string $header ): array {
 		$weighted = array();
+		$parts    = array_slice( explode( ',', $header, self::MAX_RANGES + 1 ), 0, self::MAX_RANGES );
 
-		foreach ( explode( ',', $header ) as $index => $part ) {
+		foreach ( $parts as $index => $part ) {
 			$bits   = explode( ';', trim( $part ) );
 			$locale = self::normalise( trim( $bits[0] ) );
 
@@ -180,6 +209,10 @@ final readonly class Locale {
 				if ( 1 === preg_match( '/^\s*q\s*=\s*([0-9.]+)/i', $parameter, $m ) ) {
 					$quality = (float) $m[1];
 				}
+			}
+
+			if ( $quality <= 0.0 ) {
+				continue;
 			}
 
 			// Index breaks ties, so the header's own order is preserved
@@ -208,7 +241,7 @@ final readonly class Locale {
 	public static function normalise( string $locale ): string {
 		$locale = str_replace( '_', '-', trim( $locale ) );
 
-		if ( 1 !== preg_match( '/^([A-Za-z]{2,3})(?:-([A-Za-z]{2}|[0-9]{3}))?$/', $locale, $m ) ) {
+		if ( 1 !== preg_match( '/^([A-Za-z]{2,3})(?:-([A-Za-z]{2}|[0-9]{3}))?$/D', $locale, $m ) ) {
 			return '';
 		}
 
@@ -262,11 +295,15 @@ final readonly class Locale {
 	 * it is loaded, and failing that the tag itself comes back — something
 	 * printable, never an empty option.
 	 *
+	 * Only a well-formed tag is echoed back. Anything else — markup, a
+	 * path, a sentence — gives '', so a tag taken from a query string or a
+	 * cookie cannot turn up on the page as the "name" of a language.
+	 *
 	 * @since 1.1.0
 	 *
 	 * @param string $locale Locale tag, any case, `-` or `_`.
 	 *
-	 * @return string
+	 * @return string '' for something that is not a tag.
 	 */
 	public static function endonym( string $locale ): string {
 		$tag = self::canonical( $locale );
@@ -275,12 +312,16 @@ final readonly class Locale {
 			return self::ENDONYMS[ $tag ];
 		}
 
-		if ( '' !== $tag && class_exists( \Locale::class ) ) {
+		if ( 1 !== preg_match( self::TAG, $tag ) ) {
+			return '';
+		}
+
+		if ( class_exists( \Locale::class ) ) {
 			$icu  = self::icu( $tag );
 			$name = \Locale::getDisplayName( $icu, $icu );
 
 			// ICU answers a tag it does not know with the tag itself.
-			if ( is_string( $name ) && '' !== $name && strtolower( $name ) !== strtolower( $icu ) ) {
+			if ( is_string( $name ) && strtolower( $name ) !== strtolower( $icu ) ) {
 				// Lower-case is ICU's convention for running text; an option
 				// in a menu starts with a capital in every script that has
 				// one.

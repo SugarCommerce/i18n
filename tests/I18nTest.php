@@ -337,6 +337,48 @@ final class I18nTest extends TestCase {
 		$this->assertSame( 'xx', Locale::endonym( 'xx' ) );
 	}
 
+	/**
+	 * A tag from a query string must not come back as the "name" of a
+	 * language and land in a picker as markup.
+	 */
+	public function test_something_that_is_not_a_tag_has_no_name(): void {
+		$this->assertSame( '', Locale::endonym( '<script>alert(1)</script>' ) );
+		$this->assertSame( '', Locale::endonym( 'xx" onmouseover="alert(1)' ) );
+		$this->assertSame( '', Locale::endonym( "xx\n" . 'yy' ) );
+	}
+
+	/**
+	 * `q=0` is the reader saying "not this one".
+	 */
+	public function test_a_language_weighted_zero_is_never_chosen(): void {
+		$this->assertSame( 'fr', Locale::negotiate( 'en;q=0, de;q=0.0', array( 'en', 'de' ), 'fr' ) );
+		$this->assertSame( array( 'de' ), Locale::parse( 'en;q=0,de' ) );
+	}
+
+	/**
+	 * The header is the visitor's to write: an oversized one is read only
+	 * as far as a browser would ever send.
+	 */
+	public function test_only_the_first_ranges_of_a_long_header_are_read(): void {
+		$header = implode( ',', array_fill( 0, 5000, 'xx' ) ) . ',de';
+
+		$this->assertCount( 32, Locale::parse( $header ) );
+		$this->assertSame( 'en', Locale::negotiate( $header, array( 'en', 'de' ), 'en' ) );
+	}
+
+	/**
+	 * abs( PHP_INT_MIN ) is a float, which the rules would refuse.
+	 */
+	public function test_the_smallest_int_has_a_category(): void {
+		$this->assertSame( 'many', Plural::category( PHP_INT_MIN, 'ru' ) );
+		$this->assertSame( 'many', Plural::category( PHP_INT_MIN, 'pl' ) );
+		$this->assertSame( 'other', Plural::category( PHP_INT_MIN, 'en' ) );
+		$this->assertSame(
+			'{count} items',
+			Translations::for( $this->catalogues(), 'ru' )->plural( '{count} item', '{count} items', PHP_INT_MIN, array( 'count' => '{count}' ) )
+		);
+	}
+
 	/* ─── Catalogue files ───────────────────────────────────────────── */
 
 	public function test_the_locales_are_read_from_the_directory_with_the_source_first(): void {
@@ -361,6 +403,57 @@ final class I18nTest extends TestCase {
 		$this->assertSame( 'Bestellung {reference}', $german['Order {reference}'] );
 		$this->assertSame( array(), Catalogue::file( __DIR__ . '/fixtures/lang', 'fr' ) );
 		$this->assertSame( array(), Catalogue::file( __DIR__ . '/fixtures', 'lang/de' ) );
+	}
+
+	/**
+	 * A catalogue file is code, so its name is only ever built from a
+	 * tag: never a path, a dot or a NUL.
+	 */
+	public function test_a_locale_cannot_name_a_file_outside_the_directory(): void {
+		$lang = __DIR__ . '/fixtures/lang';
+
+		foreach ( array( '../lang/de', '..\\lang\\de', '../../../etc/passwd', '..', '.', 'de.php', '' ) as $locale ) {
+			$this->assertSame( array(), Catalogue::file( $lang, $locale ), $locale );
+			$this->assertTrue( Catalogue::load( $lang, $locale )->is_empty(), $locale );
+		}
+
+		$this->assertSame( array(), Catalogue::file( $lang, "de\0" ) );
+		$this->assertSame( array(), Catalogue::file( $lang, "de\n" ) );
+	}
+
+	/**
+	 * A value a catalogue cannot hold is dropped at load, rather than
+	 * reaching the translator and throwing a TypeError mid-page.
+	 */
+	public function test_a_malformed_catalogue_entry_is_dropped_rather_than_printed(): void {
+		$french = Translations::for( __DIR__ . '/fixtures/malformed', 'fr' );
+
+		$this->assertSame( 'A number', $french->get( 'A number' ) );
+		$this->assertSame( 'Bien', $french->get( 'Fine' ) );
+		$this->assertSame( 'Introuvable', $french->get( '404' ) );
+		$this->assertSame( 'Imbriqués', $french->plural( 'Nested', 'Nested', 1 ) );
+		$this->assertSame( 'A list', $french->get( 'A list' ) );
+		$this->assertSame(
+			array( 'Nested', 'Fine', '404' ),
+			array_map( 'strval', array_keys( Catalogue::file( __DIR__ . '/fixtures/malformed', 'fr' ) ) )
+		);
+	}
+
+	/**
+	 * glob() would read the brackets in the directory's own name as a
+	 * pattern and find nothing.
+	 */
+	public function test_locales_are_listed_from_a_directory_with_brackets_in_its_name(): void {
+		$directory = sys_get_temp_dir() . '/i18n-[' . bin2hex( random_bytes( 4 ) ) . ']';
+		mkdir( $directory );
+		copy( __DIR__ . '/fixtures/lang/de.php', $directory . '/de.php' );
+
+		try {
+			$this->assertSame( array( 'en', 'de' ), Catalogue::locales( $directory ) );
+		} finally {
+			unlink( $directory . '/de.php' );
+			rmdir( $directory );
+		}
 	}
 
 	/* ─── Plural examples ───────────────────────────────────────────── */

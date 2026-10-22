@@ -30,17 +30,29 @@ namespace SugarCommerce\I18n;
  *     'one item' => [ 'one' => '1 Artikel', 'other' => '{count} Artikel' ]
  *
  * Catalogues are plain PHP arrays so they are opcached, need no parser,
- * and cost nothing to load.
+ * and cost nothing to load. The other side of that is that loading one
+ * *runs* it: a catalogue directory is code, and must never be somewhere
+ * a visitor, an upload or a translation service can write to. The file
+ * name is the one thing taken from outside, and it is only ever built
+ * from a tag that has been checked to be a tag — never `../` or a path.
  *
  * @since 1.0.0
  */
 final readonly class Catalogue {
 
 	/**
+	 * A locale tag as a catalogue file may be named: letters, digits, `-`
+	 * and `_`. Anything else — a dot, a slash, a NUL — is not a locale.
+	 */
+	private const string FILE_NAME = '/^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/D';
+
+	/**
+	 * A catalogue for one locale.
+	 *
 	 * @since 1.0.0
 	 *
-	 * @param string                              $locale  Locale tag.
-	 * @param array<string, string|array<string,string>> $entries Source => translation.
+	 * @param string                                      $locale  Locale tag.
+	 * @param array<string, string|array<string, string>> $entries Source => translation.
 	 */
 	public function __construct(
 		public string $locale,
@@ -75,11 +87,7 @@ final readonly class Catalogue {
 				continue;
 			}
 
-			$loaded = require $file;
-
-			if ( is_array( $loaded ) ) {
-				$entries = array_replace( $entries, $loaded );
-			}
+			$entries = array_replace( $entries, self::read( $file ) );
 		}
 
 		return new self( $locale, $entries );
@@ -107,8 +115,16 @@ final readonly class Catalogue {
 		$source = Locale::normalise( $source );
 		$found  = array();
 
-		foreach ( glob( rtrim( $directory, '/' ) . '/*.php' ) ?: array() as $file ) {
-			$locale = Locale::normalise( basename( $file, '.php' ) );
+		// scandir() rather than glob(), which would read `[`, `*` or `?` in
+		// the directory's own path as a pattern.
+		$names = is_dir( $directory ) ? scandir( $directory ) : false;
+
+		foreach ( false === $names ? array() : $names as $name ) {
+			if ( ! str_ends_with( $name, '.php' ) ) {
+				continue;
+			}
+
+			$locale = Locale::normalise( substr( $name, 0, -4 ) );
 
 			if ( '' !== $locale && $source !== $locale ) {
 				$found[] = $locale;
@@ -137,18 +153,62 @@ final readonly class Catalogue {
 	 *                                                     missing file.
 	 */
 	public static function file( string $directory, string $locale ): array {
-		// A tag with a separator in it is a path, not a locale.
-		$file = '' === trim( $locale ) || str_contains( $locale, '/' ) || str_contains( $locale, '\\' )
-			? null
-			: self::path( $directory, $locale );
+		// A tag with a separator, a dot or a NUL in it is a path, not a
+		// locale.
+		$file = 1 === preg_match( self::FILE_NAME, $locale ) ? self::path( $directory, $locale ) : null;
 
-		if ( null === $file ) {
+		return null === $file ? array() : self::read( $file );
+	}
+
+	/**
+	 * A catalogue file's entries, keeping only what a catalogue can hold.
+	 *
+	 * A source string mapped to a string, or to an array of CLDR category
+	 * => string. Anything else — a number, a nested array, a list with no
+	 * categories, a file that returns nothing — is dropped here rather than reaching the
+	 * translator as a value it would print as "Array" or throw on.
+	 *
+	 * Required inside a static closure, so the file sees no variables of
+	 * this class's and cannot change any.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param string $file Path to a catalogue file.
+	 *
+	 * @return array<string, string|array<string, string>>
+	 */
+	private static function read( string $file ): array {
+		$loaded = ( static fn ( string $__file ): mixed => require $__file )( $file );
+
+		if ( ! is_array( $loaded ) ) {
 			return array();
 		}
 
-		$entries = require $file;
+		$entries = array();
 
-		return is_array( $entries ) ? $entries : array();
+		foreach ( $loaded as $source => $translation ) {
+			// PHP keys `'404'` as the integer 404; it is still a string
+			// somebody wrote, and lookup() still finds it.
+			$source = (string) $source;
+
+			if ( is_string( $translation ) ) {
+				$entries[ $source ] = $translation;
+
+				continue;
+			}
+
+			$forms = is_array( $translation ) ? array_filter(
+				$translation,
+				static fn ( mixed $form, int|string $category ): bool => is_string( $category ) && is_string( $form ),
+				ARRAY_FILTER_USE_BOTH
+			) : array();
+
+			if ( array() !== $forms ) {
+				$entries[ $source ] = $forms;
+			}
+		}
+
+		return $entries;
 	}
 
 	/**
@@ -161,7 +221,7 @@ final readonly class Catalogue {
 	 * @since 1.1.0
 	 *
 	 * @param string $directory Directory holding the catalogues.
-	 * @param string $locale    Locale tag.
+	 * @param string $locale    Locale tag, already checked to be one.
 	 *
 	 * @return string|null
 	 */
