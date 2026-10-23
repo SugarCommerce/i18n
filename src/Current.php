@@ -142,6 +142,68 @@ final class Current {
 	}
 
 	/**
+	 * The language to serve this request in, from what the visitor said and
+	 * what their browser asks for.
+	 *
+	 * Locale::pick() against the catalogues there are, falling back to the
+	 * source. Only answers the question: pass the result to use() or
+	 * within() to act on it.
+	 *
+	 * @since 1.3.0
+	 *
+	 * @param array<array-key, mixed> $preferences     Tags the visitor gave,
+	 *                                                 most authoritative
+	 *                                                 first: query, cookie, …
+	 * @param string                  $accept_language Raw `Accept-Language`
+	 *                                                 value, '' for none.
+	 *
+	 * @return string An available locale.
+	 */
+	public static function pick( array $preferences, string $accept_language = '' ): string {
+		return Locale::pick( $preferences, $accept_language, self::available(), self::$source );
+	}
+
+	/**
+	 * The languages there are, for a language picker.
+	 *
+	 * Each named in itself — see Locale::endonym() — with a link to the
+	 * same page in it and whether it is the one in use. How a page links to
+	 * itself in another language (a query parameter, a path prefix, a
+	 * subdomain) is the application's business, so it is asked of $url.
+	 *
+	 * Empty when there is only one language: a menu of one is not a choice,
+	 * and an empty list lets a template draw nothing without counting.
+	 *
+	 * @since 1.3.0
+	 *
+	 * @param \Closure(string): string $url Given an available locale, the
+	 *                                      link to this page in it.
+	 *
+	 * @return list<array{locale: string, name: string, url: string, current: bool}>
+	 */
+	public static function choices( \Closure $url ): array {
+		$available = self::available();
+
+		if ( count( $available ) < 2 ) {
+			return array();
+		}
+
+		$current = self::locale();
+		$choices = array();
+
+		foreach ( $available as $locale ) {
+			$choices[] = array(
+				'locale'  => $locale,
+				'name'    => Locale::endonym( $locale ),
+				'url'     => $url( $locale ),
+				'current' => $locale === $current,
+			);
+		}
+
+		return $choices;
+	}
+
+	/**
 	 * The locale in use.
 	 *
 	 * @since 1.1.0

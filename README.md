@@ -122,6 +122,23 @@ echo __html( 'Read the {link}terms{/link}.', [ 'link' => '<a href="/terms">', '/
 
 The helpers are opt-in rather than autoloaded, and each is defined only if the name is free: WordPress already has a `__()`.
 
+### Picking the language and offering the others
+
+```php
+// What the visitor chose (query, then the cookie that remembers it), then the browser, then the source.
+$locale = Current::pick( [ $_GET['lang'] ?? null, $_COOKIE['lang'] ?? null ], $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '' );
+
+Current::within( $locale, function () {
+    foreach ( Current::choices( fn( string $locale ) => '?lang=' . rawurlencode( $locale ) ) as $choice ) {
+        // [ 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false ]
+    }
+} );
+```
+
+A choice beats the browser, because someone who picked German on one page and got English on the next would think the picker was broken. Each choice is matched like a single tag — `de-AT` is served by `de` — and `auto`, `''`, null, garbage and non-strings (`?lang[]=de` arrives as an array) are skipped rather than read as the source. Anything else the application knows, such as the language an order was placed in, goes into the list where it ranks. `pick()` only answers; `use()` or `within()` acts on it.
+
+`choices()` asks the caller how to link to the page in another language — a query parameter, a path prefix, a subdomain are all an application's business — and is empty when there is only one language, so a template draws no menu of one.
+
 ## Language names
 
 ```php
@@ -165,6 +182,7 @@ Plural::forms( 'pl', fn( int $n ) => $t->plural( '{count} file', '{count} files'
 use SugarCommerce\I18n\Locale;
 
 Locale::negotiate( $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '', [ 'en', 'de', 'pt-BR' ] );
+Locale::pick( [ $query, $cookie ], $header, [ 'en', 'de', 'pt-BR' ], 'en' );   // the first choice we have, else negotiate()
 
 Locale::normalise( 'en_gb' );   // 'en-GB'
 Locale::language( 'pt-BR' );    // 'pt'
@@ -184,7 +202,7 @@ composer install
 composer test
 ```
 
-112 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, the report's text, JSON and `--add` output, and the hardening: tags that try to name a path, malformed catalogue entries, `q=0` and oversized headers, non-tags given no name, `PHP_INT_MIN` counts, and control characters kept off the terminal.
+127 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, picking a language from the visitor's choices before the header, the language picker's entries, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, the report's text, JSON and `--add` output, and the hardening: tags that try to name a path, malformed catalogue entries, `q=0` and oversized headers, non-tags given no name, `PHP_INT_MIN` counts, and control characters kept off the terminal.
 
 ## License
 

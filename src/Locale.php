@@ -358,6 +358,51 @@ final readonly class Locale {
 	}
 
 	/**
+	 * The language to serve: what the visitor said, else what their
+	 * browser asks for, else the fallback.
+	 *
+	 * The order a page settles its language in. A choice the visitor made —
+	 * `?lang=de` from a picker, then the cookie that remembers it — beats
+	 * the browser, because someone who picked German on one page and got
+	 * English on the next would think the picker was broken. Anything else
+	 * an application knows (the language an order was placed in, an
+	 * account's setting) slots into the list wherever it ranks. The
+	 * `Accept-Language` header is the guess for everybody who said nothing.
+	 *
+	 * Each preference is matched as match() matches one tag, so `de-AT` is
+	 * served by `de`, and `auto`, null, '' and garbage are skipped rather
+	 * than read as the source language: an empty query string is not a
+	 * choice of English. So is anything that is not a string — `?lang[]=de`
+	 * arrives as an array — so `$_GET` and `$_COOKIE` values can be handed
+	 * over as they come.
+	 *
+	 * @since 1.3.0
+	 *
+	 * @param array<array-key, mixed> $preferences     Tags the visitor gave,
+	 *                                                 most authoritative
+	 *                                                 first: query, cookie, …
+	 * @param string                  $accept_language Raw `Accept-Language`
+	 *                                                 value, '' for none.
+	 * @param string[]                $available       Locales this
+	 *                                                 application has.
+	 * @param string                  $fallback        Returned when nothing
+	 *                                                 matches.
+	 *
+	 * @return string One of $available, or $fallback.
+	 */
+	public static function pick( array $preferences, string $accept_language, array $available, string $fallback = 'en' ): string {
+		foreach ( $preferences as $tag ) {
+			$locale = is_string( $tag ) ? self::match( $tag, $available ) : '';
+
+			if ( '' !== $locale ) {
+				return $locale;
+			}
+		}
+
+		return self::negotiate( $accept_language, $available, $fallback );
+	}
+
+	/**
 	 * A locale tag as ICU spells it: `pt_BR`, not `pt-BR`.
 	 *
 	 * ext-intl's formatters take the underscore everywhere; handed the

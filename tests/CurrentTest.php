@@ -154,4 +154,40 @@ final class CurrentTest extends TestCase {
 
 		$this->assertTrue( function_exists( '__' ) && function_exists( '_n' ) && function_exists( '__html' ) );
 	}
+
+	/* ─── Picking and switching ─────────────────────────────────────── */
+
+	public function test_the_request_language_is_picked_from_what_there_is(): void {
+		$this->assertSame( 'pl', Current::pick( array( 'pl', 'de' ), 'de' ) );
+		$this->assertSame( 'pt-BR', Current::pick( array( null, 'pt' ) ) );
+		$this->assertSame( 'de', Current::pick( array( 'auto' ), 'de-AT,en;q=0.5' ) );
+		$this->assertSame( 'en', Current::pick( array( 'fr' ), 'ja' ), 'Nothing we have means the source.' );
+		$this->assertSame( 'en', Current::locale(), 'Picking does not switch.' );
+	}
+
+	public function test_a_picker_lists_every_language_named_in_itself(): void {
+		$choices = Current::within( 'pl', static fn (): array => Current::choices(
+			static fn ( string $locale ): string => '?lang=' . $locale
+		) );
+
+		$this->assertSame(
+			array(
+				array( 'locale' => 'en', 'name' => 'English', 'url' => '?lang=en', 'current' => false ),
+				array( 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false ),
+				array( 'locale' => 'pl', 'name' => 'Polski', 'url' => '?lang=pl', 'current' => true ),
+				array( 'locale' => 'pt-BR', 'name' => 'Português (Brasil)', 'url' => '?lang=pt-BR', 'current' => false ),
+			),
+			$choices
+		);
+	}
+
+	/**
+	 * A menu of one is not a choice.
+	 */
+	public function test_a_single_language_has_no_picker(): void {
+		Current::configure( __DIR__ . '/fixtures/code' );
+
+		$this->assertSame( array( 'en' ), Current::available() );
+		$this->assertSame( array(), Current::choices( static fn ( string $locale ): string => '/' . $locale ) );
+	}
 }

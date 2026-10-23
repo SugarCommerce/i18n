@@ -295,6 +295,42 @@ final class I18nTest extends TestCase {
 		$this->assertSame( $expected, Locale::match( $tag, array( 'en', 'de', 'pt-BR' ) ) );
 	}
 
+	/* ─── Picking a request's language ───────────────────────────────── */
+
+	/**
+	 * @return array<string, array{0: array<array-key, mixed>, 1: string, 2: string}>
+	 */
+	public static function picks(): array {
+		return array(
+			'the query beats everything'        => array( array( 'de', 'pt' ), 'en', 'de' ),
+			'then the cookie'                   => array( array( null, 'pt' ), 'de', 'pt-BR' ),
+			'then the header'                   => array( array( null, null ), 'fr;q=0.2, de;q=0.9', 'de' ),
+			'a region is served by its base'    => array( array( 'de-AT' ), '', 'de' ),
+			'an empty query is not a choice'    => array( array( '', 'de' ), '', 'de' ),
+			'auto is not a choice'              => array( array( 'auto' ), 'pt', 'pt-BR' ),
+			'garbage is skipped'                => array( array( '../../etc', '<b>' ), 'de', 'de' ),
+			'a non-string is skipped'           => array( array( array( 'de' ), 7, 'pt' ), '', 'pt-BR' ),
+			'an unsupported choice falls past'  => array( array( 'ja' ), 'de', 'de' ),
+			'nothing at all gives the fallback' => array( array(), '', 'fr' ),
+			'nothing matching gives it too'     => array( array( 'ja' ), 'ko, zh;q=0.5', 'fr' ),
+		);
+	}
+
+	/**
+	 * What the visitor said, in order, then the browser, then the fallback.
+	 *
+	 * @param array<array-key, mixed> $preferences
+	 */
+	#[DataProvider( 'picks' )]
+	public function test_a_language_is_picked_from_choices_then_the_header( array $preferences, string $header, string $expected ): void {
+		$this->assertSame( $expected, Locale::pick( $preferences, $header, array( 'en', 'de', 'pt-BR' ), 'fr' ) );
+	}
+
+	public function test_a_picked_language_is_spelt_as_the_application_spells_it(): void {
+		$this->assertSame( 'pt_BR', Locale::pick( array( 'PT-br' ), '', array( 'en', 'pt_BR' ) ) );
+		$this->assertSame( 'en', Locale::pick( array( 'xx' ), '', array() ) );
+	}
+
 	public function test_icu_spells_a_tag_with_an_underscore(): void {
 		$this->assertSame( 'pt_BR', Locale::icu( 'pt-BR' ) );
 		$this->assertSame( 'de', Locale::icu( 'de' ) );
