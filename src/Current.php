@@ -40,6 +40,13 @@ namespace SugarCommerce\I18n;
 final class Current {
 
 	/**
+	 * A year in seconds: how long remember() keeps a choice unless told.
+	 *
+	 * @since 1.4.0
+	 */
+	public const int YEAR = 31_536_000;
+
+	/**
 	 * Where the catalogues live, or '' before configure().
 	 */
 	private static string $directory = '';
@@ -179,7 +186,10 @@ final class Current {
 	 * @param \Closure(string): string $url Given an available locale, the
 	 *                                      link to this page in it.
 	 *
-	 * @return list<array{locale: string, name: string, url: string, current: bool}>
+	 * Each also says which way its name is written, for the `dir` of its
+	 * link: "العربية" in an English menu is still right-to-left. Since 1.4.0.
+	 *
+	 * @return list<array{locale: string, name: string, url: string, current: bool, dir: 'ltr'|'rtl'}>
 	 */
 	public static function choices( \Closure $url ): array {
 		$available = self::available();
@@ -197,10 +207,92 @@ final class Current {
 				'name'    => Locale::endonym( $locale ),
 				'url'     => $url( $locale ),
 				'current' => $locale === $current,
+				'dir'     => Locale::is_rtl( $locale ) ? 'rtl' : 'ltr',
 			);
 		}
 
 		return $choices;
+	}
+
+	/**
+	 * A link to this page in another language, by query parameter, for
+	 * choices().
+	 *
+	 * The page's own query with $parameter replaced, so switching language
+	 * on a cart or a filtered list keeps everything else the page was
+	 * holding. Relative — `?lang=de&page=2` — so the path stays as it is.
+	 * The parameter goes first, and is replaced even when it arrived as an
+	 * array (`?lang[]=de`); every other value, arrays included, is carried
+	 * over and encoded by http_build_query().
+	 *
+	 * The link is a URL, not markup: escape it into an attribute like any
+	 * other.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param array<array-key, mixed> $query     The request's query, as
+	 *                                           $_GET.
+	 * @param string                  $parameter The query parameter the
+	 *                                           picker sets.
+	 *
+	 * @return \Closure(string): string
+	 */
+	public static function switcher( array $query, string $parameter = 'lang' ): \Closure {
+		unset( $query[ $parameter ] );
+
+		return static fn ( string $locale ): string => '?' . http_build_query( array( $parameter => $locale ) + $query );
+	}
+
+	/**
+	 * The cookie that remembers a language the visitor chose.
+	 *
+	 * Given the choice this request carries — `$_GET['lang']` from the
+	 * picker — the cookie to send so the next page is in it too, and pick()
+	 * finds it there. Empty when there is nothing new to remember: no
+	 * choice (a page that only read the cookie), `auto`, a language with no
+	 * catalogue, or something that is not a string (`?lang[]=de`). The value
+	 * is the available locale the choice was matched to, so `pt` is
+	 * remembered as `pt-BR` and a tag is never written back as it was typed.
+	 *
+	 * The options are setcookie()'s array form, so the result goes straight
+	 * to `setcookie( $c['name'], $c['value'], $c['options'] )` or to a
+	 * library that builds the header from the same keys; this package has
+	 * no dependencies to build one with. Hidden from script, because nothing
+	 * on the page needs to read it, and Lax, so it rides along on a link
+	 * from another site. Secure has to follow the request — a browser drops
+	 * a Secure cookie from a plain-HTTP development host without a word — so
+	 * it is asked for.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param string $name     Cookie name.
+	 * @param mixed  $choice   The choice this request carries, as it
+	 *                         arrived: `$_GET['lang'] ?? null`.
+	 * @param bool   $secure   Whether the request came over HTTPS.
+	 * @param int    $lifetime Seconds to remember it. 0, or less, is a
+	 *                         session cookie, gone when the browser closes.
+	 * @param string $path     The path the cookie is sent back on.
+	 *
+	 * @return array{name: string, value: string, options: array{expires: int, path: string, secure: bool, httponly: true, samesite: 'Lax'}}|array{}
+	 */
+	public static function remember( string $name, mixed $choice, bool $secure, int $lifetime = self::YEAR, string $path = '/' ): array {
+		$locale = is_string( $choice ) ? self::supported( $choice ) : '';
+
+		if ( '' === $locale ) {
+			return array();
+		}
+
+		return array(
+			'name'    => $name,
+			'value'   => $locale,
+			'options' => array(
+				'expires'  => $lifetime > 0 ? time() + $lifetime : 0,
+				'path'     => $path,
+				'secure'   => $secure,
+				'httponly' => true,
+				'samesite' => 'Lax',
+			),
+		);
 	}
 
 	/**

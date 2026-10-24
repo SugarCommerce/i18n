@@ -172,10 +172,10 @@ final class CurrentTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				array( 'locale' => 'en', 'name' => 'English', 'url' => '?lang=en', 'current' => false ),
-				array( 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false ),
-				array( 'locale' => 'pl', 'name' => 'Polski', 'url' => '?lang=pl', 'current' => true ),
-				array( 'locale' => 'pt-BR', 'name' => 'Português (Brasil)', 'url' => '?lang=pt-BR', 'current' => false ),
+				array( 'locale' => 'en', 'name' => 'English', 'url' => '?lang=en', 'current' => false, 'dir' => 'ltr' ),
+				array( 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false, 'dir' => 'ltr' ),
+				array( 'locale' => 'pl', 'name' => 'Polski', 'url' => '?lang=pl', 'current' => true, 'dir' => 'ltr' ),
+				array( 'locale' => 'pt-BR', 'name' => 'Português (Brasil)', 'url' => '?lang=pt-BR', 'current' => false, 'dir' => 'ltr' ),
 			),
 			$choices
 		);
@@ -189,5 +189,160 @@ final class CurrentTest extends TestCase {
 
 		$this->assertSame( array( 'en' ), Current::available() );
 		$this->assertSame( array(), Current::choices( static fn ( string $locale ): string => '/' . $locale ) );
+	}
+
+	/**
+	 * "العربية" in an English menu is still written right to left.
+	 */
+	public function test_a_picker_says_which_way_each_name_is_written(): void {
+		Current::configure( __DIR__ . '/fixtures/rtl' );
+
+		$this->assertSame(
+			array(
+				array( 'locale' => 'en', 'name' => 'English', 'url' => '?lang=en', 'current' => true, 'dir' => 'ltr' ),
+				array( 'locale' => 'ar', 'name' => 'العربية', 'url' => '?lang=ar', 'current' => false, 'dir' => 'rtl' ),
+			),
+			Current::choices( Current::switcher( array() ) )
+		);
+	}
+
+	/* ─── The switcher link ─────────────────────────────────────────── */
+
+	public function test_the_switcher_links_by_query_parameter(): void {
+		$link = Current::switcher( array() );
+
+		$this->assertSame( '?lang=de', $link( 'de' ) );
+		$this->assertSame( '?lang=pt-BR', $link( 'pt-BR' ) );
+	}
+
+	/**
+	 * A cart, or a list on page two, should still be there in German.
+	 */
+	public function test_the_switcher_keeps_the_rest_of_the_query_and_replaces_the_language(): void {
+		$link = Current::switcher( array( 'page' => '2', 'lang' => 'pl', 'sort' => 'price' ) );
+
+		$this->assertSame( '?lang=de&page=2&sort=price', $link( 'de' ) );
+	}
+
+	public function test_the_switcher_encodes_what_it_carries_over(): void {
+		$link = Current::switcher( array( 'q' => 'a b&c=d', 'name' => 'Zoë', 'next' => '/cart?x=1#top' ) );
+
+		$this->assertSame( '?lang=de&q=a+b%26c%3Dd&name=Zo%C3%AB&next=%2Fcart%3Fx%3D1%23top', $link( 'de' ) );
+	}
+
+	public function test_the_switcher_carries_array_values_over(): void {
+		$link = Current::switcher( array( 'tag' => array( 'red', 'blue' ), 'filter' => array( 'size' => 'L' ) ) );
+
+		$this->assertSame( '?lang=de&tag%5B0%5D=red&tag%5B1%5D=blue&filter%5Bsize%5D=L', $link( 'de' ) );
+	}
+
+	/**
+	 * `?lang[]=de` arrives as an array; carried over, it would add a second
+	 * language to every link.
+	 */
+	public function test_the_switcher_replaces_a_language_that_arrived_as_an_array(): void {
+		$link = Current::switcher( array( 'lang' => array( 'de', 'pl' ), 'page' => '2' ) );
+
+		$this->assertSame( '?lang=pl&page=2', $link( 'pl' ) );
+	}
+
+	public function test_the_switcher_takes_the_parameter_name(): void {
+		$link = Current::switcher( array( 'lang' => 'pl', 'locale' => 'de', 'page' => '2' ), 'locale' );
+
+		$this->assertSame( '?locale=pt-BR&lang=pl&page=2', $link( 'pt-BR' ) );
+	}
+
+	/**
+	 * choices() only passes available locales, but a link handed anything
+	 * still cannot break out of its own value.
+	 */
+	public function test_the_switcher_encodes_the_locale_it_is_given(): void {
+		$link = Current::switcher( array( 'page' => '2' ) );
+
+		$this->assertSame( '?lang=x%26page%3D9&page=2', $link( 'x&page=9' ) );
+	}
+
+	public function test_the_switcher_feeds_the_picker(): void {
+		$choices = Current::within( 'de', static fn (): array => Current::choices( Current::switcher( array( 'lang' => 'de', 'id' => '7' ) ) ) );
+
+		$this->assertSame(
+			array( '?lang=en&id=7', '?lang=de&id=7', '?lang=pl&id=7', '?lang=pt-BR&id=7' ),
+			array_column( $choices, 'url' )
+		);
+	}
+
+	/* ─── Remembering a choice ──────────────────────────────────────── */
+
+	public function test_a_choice_is_remembered_for_a_year(): void {
+		$before = time();
+		$cookie = Current::remember( 'lang', 'de', true );
+		$after  = time();
+
+		$this->assertSame( 'lang', $cookie['name'] ?? null );
+		$this->assertSame( 'de', $cookie['value'] ?? null );
+
+		$options = $cookie['options'] ?? array();
+		$expires = $options['expires'] ?? 0;
+		unset( $options['expires'] );
+
+		$this->assertGreaterThanOrEqual( $before + Current::YEAR, $expires );
+		$this->assertLessThanOrEqual( $after + Current::YEAR, $expires );
+		$this->assertSame( array( 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax' ), $options );
+	}
+
+	public function test_the_cookie_is_shaped_by_the_caller(): void {
+		$before = time();
+		$cookie = Current::remember( 'site_language', 'pl', false, 3600, '/shop' );
+
+		$this->assertSame( 'site_language', $cookie['name'] ?? null );
+		$this->assertSame( '/shop', $cookie['options']['path'] ?? null );
+		$this->assertFalse( $cookie['options']['secure'] ?? true );
+		$this->assertGreaterThanOrEqual( $before + 3600, $cookie['options']['expires'] ?? 0 );
+		$this->assertLessThan( $before + 3600 + 60, $cookie['options']['expires'] ?? PHP_INT_MAX );
+	}
+
+	public function test_no_lifetime_is_a_session_cookie(): void {
+		$this->assertSame( 0, Current::remember( 'lang', 'de', true, 0 )['options']['expires'] ?? null );
+		$this->assertSame( 0, Current::remember( 'lang', 'de', true, -60 )['options']['expires'] ?? null );
+	}
+
+	/**
+	 * The locale it was matched to, never the tag as it was typed.
+	 */
+	public function test_what_is_remembered_is_the_language_that_serves_the_choice(): void {
+		$this->assertSame( 'pt-BR', Current::remember( 'lang', 'pt', true )['value'] ?? null );
+		$this->assertSame( 'de', Current::remember( 'lang', 'de_AT', true )['value'] ?? null );
+		$this->assertSame( 'en', Current::remember( 'lang', 'EN', true )['value'] ?? null, 'The source is a choice too.' );
+	}
+
+	public function test_a_right_to_left_choice_is_remembered_like_any_other(): void {
+		Current::configure( __DIR__ . '/fixtures/rtl' );
+
+		$this->assertSame( 'ar', Current::remember( 'lang', 'ar-EG', true )['value'] ?? null );
+	}
+
+	/**
+	 * A page that only read the cookie has nothing new to remember, and a
+	 * language there is no catalogue for is not worth a year.
+	 */
+	public function test_nothing_is_remembered_without_a_choice_we_can_serve(): void {
+		foreach ( array( null, '', 'auto', 'xx', 'fr', 'de;q=1', '../../etc/passwd', "de\r\nSet-Cookie: x=1" ) as $choice ) {
+			$this->assertSame( array(), Current::remember( 'lang', $choice, true ), var_export( $choice, true ) );
+		}
+	}
+
+	/**
+	 * `?lang[]=de` arrives as an array; cast, it would be "Array".
+	 */
+	public function test_a_choice_that_is_not_a_string_is_not_remembered(): void {
+		foreach ( array( array( 'de' ), array(), 1, 1.5, true, new \stdClass() ) as $choice ) {
+			$this->assertSame( array(), Current::remember( 'lang', $choice, true ) );
+		}
+	}
+
+	public function test_remembering_does_not_switch(): void {
+		Current::remember( 'lang', 'de', true );
+
+		$this->assertSame( 'en', Current::locale() );
 	}
 }

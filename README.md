@@ -130,14 +130,32 @@ $locale = Current::pick( [ $_GET['lang'] ?? null, $_COOKIE['lang'] ?? null ], $_
 
 Current::within( $locale, function () {
     foreach ( Current::choices( fn( string $locale ) => '?lang=' . rawurlencode( $locale ) ) as $choice ) {
-        // [ 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false ]
+        // [ 'locale' => 'de', 'name' => 'Deutsch', 'url' => '?lang=de', 'current' => false, 'dir' => 'ltr' ]
     }
 } );
 ```
 
 A choice beats the browser, because someone who picked German on one page and got English on the next would think the picker was broken. Each choice is matched like a single tag — `de-AT` is served by `de` — and `auto`, `''`, null, garbage and non-strings (`?lang[]=de` arrives as an array) are skipped rather than read as the source. Anything else the application knows, such as the language an order was placed in, goes into the list where it ranks. `pick()` only answers; `use()` or `within()` acts on it.
 
-`choices()` asks the caller how to link to the page in another language — a query parameter, a path prefix, a subdomain are all an application's business — and is empty when there is only one language, so a template draws no menu of one.
+`choices()` asks the caller how to link to the page in another language — a query parameter, a path prefix, a subdomain are all an application's business — and is empty when there is only one language, so a template draws no menu of one. Each choice carries a `dir` for its link, because "العربية" in an English menu is still written right to left.
+
+### Linking by query parameter and remembering the choice
+
+```php
+Current::choices( Current::switcher( $_GET ) );            // '?lang=de&page=2' — the rest of the query kept
+Current::choices( Current::switcher( $_GET, 'locale' ) );  // another parameter name
+
+$cookie = Current::remember( 'lang', $_GET['lang'] ?? null, $is_https );
+// [ 'name' => 'lang', 'value' => 'de', 'options' => [ 'expires' => …, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax' ] ]
+if ( $cookie ) {
+    setcookie( $cookie['name'], $cookie['value'], $cookie['options'] );
+}
+Current::remember( 'lang', $_GET['lang'] ?? null, $is_https, 86_400 * 30, '/shop' );   // a month, under /shop
+```
+
+`switcher()` replaces the language and keeps everything else the page was holding, so switching on a cart or page two of a list lands on the same cart or page two. The link is relative and a URL, not markup: escape it into the attribute like any other.
+
+`remember()` is empty when there is nothing new to remember — no choice in the query, `auto`, a language without a catalogue, or `?lang[]=de` — and otherwise remembers the locale the choice was matched to, so `pt` is stored as `pt-BR`. The options are setcookie()'s array form, so they go to setcookie() or to whatever builds your Set-Cookie headers; this package still has no dependencies. Pass `secure` from the request: a browser drops a Secure cookie from a plain-HTTP development host without a word. A lifetime of 0 is a session cookie.
 
 ## Language names
 
@@ -202,7 +220,7 @@ composer install
 composer test
 ```
 
-127 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, picking a language from the visitor's choices before the header, the language picker's entries, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, the report's text, JSON and `--add` output, and the hardening: tags that try to name a path, malformed catalogue entries, `q=0` and oversized headers, non-tags given no name, `PHP_INT_MIN` counts, and control characters kept off the terminal.
+144 tests — the CLDR categories for six languages including the Russian teens and the Polish boundary, plural examples and per-category forms, negotiation with quality weights and regional fallback, single-tag matching that tells "no preference" from the source, picking a language from the visitor's choices before the header, the language picker's entries and the direction each name is written in, the switcher link keeping and encoding the rest of the query, remembering a choice in a cookie only when it is one we can serve, endonyms, placeholder reordering and checking, regional catalogue inheritance, the fallback-to-source guarantee, the request scope restoring its language after work that throws, the opt-in helpers, string extraction (comments, Blade comments, methods and look-alike names ignored), the catalogue diff, the report's text, JSON and `--add` output, and the hardening: tags that try to name a path, malformed catalogue entries, `q=0` and oversized headers, non-tags given no name, `PHP_INT_MIN` counts, and control characters kept off the terminal.
 
 ## License
 
